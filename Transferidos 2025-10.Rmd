@@ -1,0 +1,133 @@
+---
+title: "Transferidos 2025-10"
+author: "Laura Rodríguez"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r}
+library(readxl)
+library(writexl)
+library(dplyr)
+library(rpart)# Árboles de decisión
+library(rpart.plot)# Visualización del árbol
+library(caret) # Entrenamiento y validación
+```
+
+```{r}
+transferidos <- read_excel("transferidos_202510.xlsx") 
+
+```
+
+```{r}
+head(transferidos)
+
+```
+
+```{r}
+names(transferidos) <- make.names(names(transferidos), unique = TRUE)
+
+```
+
+```{r}
+
+# Crear las tres variables de cambio
+transferidos <- transferidos %>%
+  mutate(CAMBIO_CAMPUS = ifelse(CAMPUS_ACTUAL != CAMPUS_ANT, 1, 0),
+    CAMBIO_CARRERA = ifelse(CARRERA_ACTUAL != CARRERA_ANT, 1, 0),
+    CAMBIO_FACULTAD = ifelse(FACULTAD_ACT != FACULTAD_ANT, 1, 0)
+  )
+ 
+```
+
+```{r}
+# Ver algunas filas para revisar
+transferidos %>% 
+  select(CAMPUS_ACTUAL, CAMPUS_ANT, CAMBIO_CAMPUS,
+         CARRERA_ACTUAL, CARRERA_ANT, CAMBIO_CARRERA,
+         FACULTAD_ACT, FACULTAD_ANT, CAMBIO_FACULTAD) %>% 
+  head(10)
+```
+
+```{r}
+# Filtrar columnas relevantes
+modelo_datos <- transferidos %>%
+  select(CAMBIO_CAMPUS, sexo, edad, FACULTAD_ANT, CARRERA_ANT, CAMPUS_ANT) %>%
+  filter(!is.na(CAMBIO_CAMPUS)) %>%
+  na.omit()  # elimina filas con NA
+
+```
+
+```{r}
+
+# Asegurar que variables categóricas sean factores
+modelo_datos$edad <- as.numeric(modelo_datos$edad)
+modelo_datos$sexo <- as.factor(modelo_datos$sexo)
+modelo_datos$FACULTAD_ANT <- as.factor(modelo_datos$FACULTAD_ANT)
+modelo_datos$CARRERA_ANT <- as.factor(modelo_datos$CARRERA_ANT)
+modelo_datos$CAMPUS_ANT <- as.factor(modelo_datos$CAMPUS_ANT)
+modelo_datos$CAMBIO_CAMPUS <- as.factor(modelo_datos$CAMBIO_CAMPUS)
+```
+
+```{r}
+set.seed(123)
+indice <- createDataPartition(modelo_datos$CAMBIO_CAMPUS, p = 0.7, list = FALSE)
+train <- modelo_datos[indice, ]
+test <- modelo_datos[-indice, ]
+
+# Reentrena el árbol con EDAD como numérico
+arbol <- rpart(CAMBIO_CAMPUS ~ ., data = train, method = "class")
+
+# Ahora sí: predice sin error
+pred <- predict(arbol, newdata = test, type = "class")
+
+# Evaluación
+confusionMatrix(pred, test$CAMBIO_CAMPUS)
+
+
+```
+
+
+```{r}
+
+library(ROSE)
+
+set.seed(123)  # para reproducibilidad
+
+# Crear partición 70% entrenamiento / 30% prueba
+indice <- createDataPartition(modelo_datos$CAMBIO_CAMPUS, p = 0.7, list = FALSE)
+train <- modelo_datos[indice, ]
+test <- modelo_datos[-indice, ]
+
+train_balanceado <- ROSE(CAMBIO_CAMPUS ~ ., data = train, seed = 1)$data
+```
+
+```{r}
+
+
+# Entrenar modelo
+arbol <- rpart(CAMBIO_CAMPUS ~ ., data = train, method = "class")
+
+# Visualizar árbol
+rpart.plot(arbol)
+
+
+```
+
+```{r}
+
+# Entrenar árbol de decisión con los datos balanceados
+arbol_balanceado <- rpart(CAMBIO_CAMPUS ~ ., data = train_balanceado, method = "class")
+
+# Predicción sobre test original
+pred_balanceado <- predict(arbol_balanceado, newdata = test, type = "class")
+
+# Evaluación
+confusionMatrix(pred_balanceado, test$CAMBIO_CAMPUS)
+
+
+```
